@@ -1,8 +1,3 @@
-/*********
-  LEDEdit PRO
-  How to Install ESP32 Boards in Arduino IDE 2.0
-*********/
-
 #include <Arduino.h>
 #include "AiEsp32RotaryEncoder.h"
 #include <WiFi.h>
@@ -10,29 +5,27 @@
 #include <Wire.h>
 #include <ArduinoJson.h>
 #include <Adafruit_NeoPixel.h>
-
-
+#include <U8g2lib.h>
+#include <SPI.h>
 
 
 /*
 connecting Rotary encoder
 
-Rotary encoder side    MICROCONTROLLER side  
--------------------    ---------------------------------------------------------------------
-CLK (A pin)            any microcontroler intput pin with interrupt -> in this example pin 32
-DT (B pin)             any microcontroler intput pin with interrupt -> in this example pin 21
-SW (button pin)        any microcontroler intput pin with interrupt -> in this example pin 25
-GND - to microcontroler GND
-VCC                    microcontroler VCC (then set ROTARY_ENCODER_VCC_PIN -1) 
-
+Rotary encoder side    
+-------------------   
+CLK (A pin)            
+DT (B pin)             
+SW (button pin)        
+GND - to microcontroler 
+VCC                    
 ***OR in case VCC pin is not free you can cheat and connect:***
 VCC                    any microcontroler output pin - but set also ROTARY_ENCODER_VCC_PIN 25 
                         in this example pin 25
-
 */
 
-#define ROTARY_ENCODER_A_PIN 32
-#define ROTARY_ENCODER_B_PIN 35
+#define ROTARY_ENCODER_A_PIN 35
+#define ROTARY_ENCODER_B_PIN 32
 #define ROTARY_ENCODER_BUTTON_PIN 33
 #define ROTARY_ENCODER_VCC_PIN -1 /* 27 put -1 of Rotary encoder Vcc is connected directly to 3,3V; else you can use declared output pin for powering rotary encoder */
 #define LED_PIN    25
@@ -41,13 +34,10 @@ VCC                    any microcontroler output pin - but set also ROTARY_ENCOD
 //#define ROTARY_ENCODER_STEPS 1
 //#define ROTARY_ENCODER_STEPS 2
 #define ROTARY_ENCODER_STEPS 4
-
-// Replace the next variables with your SSID/Password combination
+U8G2_SSD1306_128X32_UNIVISION_F_HW_I2C u8g2(U8G2_R0); // Replace the next variables with your SSID/Password combination
 const char* ssid = "";
 const char* password = "";
 
-// Add your MQTT Broker IP address, example:
-//const char* mqtt_server = "192.168.1.144";
 const char* mqtt_server = "edifier530d";
 
 WiFiClient espClient;
@@ -64,11 +54,6 @@ long last_state = 0;
 AiEsp32RotaryEncoder rotaryEncoder = AiEsp32RotaryEncoder(ROTARY_ENCODER_A_PIN, ROTARY_ENCODER_B_PIN, ROTARY_ENCODER_BUTTON_PIN, ROTARY_ENCODER_VCC_PIN, ROTARY_ENCODER_STEPS);
 
 
-//********** button handling
-//********** button handling
-//********** button handling
-//********** button handling
-//********** button handling
 /*
 	Note: try changing shortPressAfterMiliseconds and longPressAfterMiliseconds to fit your needs
 	In case you dont need long press set longPressAfterMiliseconds=999999;  that should be enough.
@@ -101,6 +86,18 @@ AiEsp32RotaryEncoder rotaryEncoder = AiEsp32RotaryEncoder(ROTARY_ENCODER_A_PIN, 
 unsigned long shortPressAfterMiliseconds = 50;   //how long short press shoud be. Do not set too low to avoid bouncing (false press events).
 unsigned long longPressAfterMiliseconds = 1000;  //how long čong press shoud be.
 
+void print_state(const char* text){
+  u8g2.clearBuffer();
+  u8g2.drawStr(0, 30, text);
+  u8g2.updateDisplay();
+}
+
+void print_volume(int volume){
+  u8g2.clearBuffer();
+  u8g2.drawStr(0, 30, "Volume:");
+  u8g2.drawStr(96, 30, String(volume).c_str());
+  u8g2.updateDisplayArea(12, 0, 16, 4);
+}
 
 void on_button_short_click() {
   Serial.print("button SHORT press ");
@@ -152,10 +149,7 @@ void handle_rotary_button() {
   }
   wasButtonDown = false;
 }
-//********** button handling ----
-//********** button handling ----
-//********** button handling ----
-//********** button handling ----
+
 
 void rotary_loop() {
   //dont print anything unless value changed
@@ -168,6 +162,7 @@ void rotary_loop() {
     last_change = millis();
     state_led.setPixelColor(0, rotaryEncoder.readEncoder() * 2, 0, 0, 0);
     state_led.show();
+    print_volume(rotaryEncoder.readEncoder());
   }
   handle_rotary_button();
 }
@@ -182,6 +177,13 @@ void setup() {
   state_led.begin();           
   state_led.show();            
   state_led.setBrightness(100);
+  u8g2.begin();
+  u8g2.clearBuffer();
+  u8g2.setFont(u8g2_font_7x14_tf);
+  //u8g2.setFlipMode(0);
+
+  print_state("Initialization...");
+
   //we must initialize rotary encoder
   rotaryEncoder.begin();
   rotaryEncoder.setup(readEncoderISR);
@@ -208,9 +210,12 @@ void setup() {
   setup_wifi();
   client.setServer(mqtt_server, 1883);
   client.setCallback(callback);
+
+
 }
 
 void setup_wifi() {
+  print_state("Connecting to WI-FI...");
   delay(10);
   // We start by connecting to a WiFi network
   Serial.println();
@@ -227,7 +232,11 @@ void setup_wifi() {
   Serial.println("");
   Serial.println("WiFi connected");
   Serial.println("IP address: ");
+  print_state("WiFi connected");
+  delay(100);
   Serial.println(WiFi.localIP());
+  print_state(WiFi.localIP().toString().c_str());
+  delay(1000);
 }
 
 void reconnect() {
@@ -236,10 +245,12 @@ void reconnect() {
   while (!client.connected()) {
     state_led.setPixelColor(0, 255,0,0, 0);
     state_led.show();
+    print_state("Connecting to MQTT...");
     Serial.print("Attempting MQTT connection...");
     // Attempt to connect
     if (client.connect("ESP8266Client")) {
       Serial.println("connected");
+      print_state("MQTT connected");
       // Subscribe
       client.subscribe("/settings");
     } else {
@@ -255,6 +266,8 @@ void reconnect() {
   delay(50);
   state_led.setPixelColor(0, 0,0,0, 0);
   state_led.show();
+  u8g2.setFont(u8g2_font_t0_22_tf);
+  print_state("Volume:");
 }
 
 void callback(char* topic, byte* message, unsigned int length) {
@@ -281,6 +294,7 @@ void callback(char* topic, byte* message, unsigned int length) {
       Serial.print("Rotary changed to ");
       Serial.println(volume);
       rotaryEncoder.setEncoderValue(volume);
+      print_volume(rotaryEncoder.readEncoder());
       isRotaryInit = true;
     }
   }
